@@ -1,0 +1,19 @@
+import { InsertOpts, Job, JobArgs } from '../types';
+
+/**
+ * Common interface for all RiverQueue drivers (pg, Prisma, Sequelize, etc.).
+ */
+export default interface Driver {
+  /**
+   * Checks if the driver can connect to the database.
+   */
+  connected(): Promise<void>;
+
+  /**
+   * Inserts a new job into the queue using the provided arguments and options.
+   * @param args - The job arguments to insert.
+   * @param opts - Options for job insertion.
+   * @returns A promise that resolves to the inserted Job.
+   */
+  insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<Job>;
+}
