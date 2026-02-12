@@ -1,4 +1,4 @@
-// jest.setTimeout(30000);
+jest.setTimeout(30000);
 
 import { RiverClient } from '../../src';
 import { PgDriver } from '../../src/drivers/pg';
@@ -12,7 +12,6 @@ describe('RiverClient Integration', () => {
   };
 
   beforeAll((done) => {
-    jest.setTimeout(30000);
     // Start the Go engine before running tests
     const { spawn } = require('child_process');
 

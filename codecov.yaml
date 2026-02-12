@@ -1,0 +1,20 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 57.5%       # Set your desired threshold here
+        threshold: 0%       # Allowed drop before failing
+        if_no_uploads: error
+        informational: false
+    patch:
+      default:
+        target: 57.5%
+        threshold: 0%
+        informational: false
+
+  # Ignore non-code files like docs, markdown, etc.
+  # ignore:
+  #   - "**/*.md"
+  #   - "**/README.md"
+  #   - "**/docs/**"
+  #   - "**/CHANGELOG.md"
