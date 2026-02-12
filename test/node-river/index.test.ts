@@ -1,3 +1,5 @@
+// jest.setTimeout(30000);
+
 import { RiverClient } from '../../src';
 import { PgDriver } from '../../src/drivers/pg';
 
@@ -24,7 +26,7 @@ describe('RiverClient Integration', () => {
 
     goProcess = spawn('go', ['run', 'main.go'], {
       cwd: goEngineDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: 'inherit',
       detached: true,
     });
 
@@ -62,5 +64,41 @@ describe('RiverClient Integration', () => {
     expect(dbUrl).toBeDefined();
     client = new RiverClient(new PgDriver({ connectionString: dbUrl! }), {});
     await expect(client.verifyConnection()).resolves.not.toThrow();
+  });
+
+  it('should sort strings and write to temp file', async () => {
+    const fs = require('fs');
+    const path = '/tmp/sorted-strings.json';
+    // Remove old file if it exists
+    if (fs.existsSync(path)) fs.unlinkSync(path);
+
+    // Enqueue a sort job
+    const unsorted = ['banana', 'apple', 'cherry'];
+    await client.insert(
+      { kind: 'sort_args', strings: unsorted },
+      { queue: 'default', maxAttempts: 1 },
+    );
+
+    // Wait for the file to appear and check contents
+    await new Promise((resolve, reject) => {
+      const start = Date.now();
+      const poll = () => {
+        if (fs.existsSync(path)) {
+          const content = fs.readFileSync(path, 'utf8');
+          try {
+            const sorted = JSON.parse(content).sorted;
+            expect(sorted).toEqual(['apple', 'banana', 'cherry']);
+            resolve(undefined);
+          } catch (e) {
+            reject(e);
+          }
+        } else if (Date.now() - start > 10000) {
+          reject(new Error('Timed out waiting for sorted-strings.json'));
+        } else {
+          setTimeout(poll, 100);
+        }
+      };
+      poll();
+    });
   });
 });

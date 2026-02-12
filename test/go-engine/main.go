@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -96,7 +97,7 @@ func main() {
 }
 
 type SortArgs struct {
-	Strings []string `json:"args"`
+	Strings []string `json:"strings"`
 }
 
 func (SortArgs) Kind() string {
@@ -111,7 +112,16 @@ func (w *SortWorker) Work(ctx context.Context, job *river.Job[SortArgs]) error {
 	args := job.Args
 	if args.Strings != nil {
 		sort.Strings(args.Strings)
+		// Write sorted strings to a temp file for test verification
+		f, err := os.Create("/tmp/sorted-strings.json")
+		if err == nil {
+			type result struct {
+				Sorted []string `json:"sorted"`
+			}
+			b, _ := json.Marshal(result{Sorted: args.Strings})
+			_, _ = f.Write(b)
+			f.Close()
+		}
 	}
-	fmt.Println("Sorted strings:", args.Strings)
 	return nil
 }

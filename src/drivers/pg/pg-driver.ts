@@ -41,8 +41,9 @@ export default class PgDriver implements Driver {
   }
 
   async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<Job> {
+    const { kind, ...restArgs } = args;
     const columns = ['kind', 'args', 'queue', 'max_attempts'];
-    const values = [args.kind, JSON.stringify(args), opts.queue, opts.maxAttempts];
+    const values = [kind, JSON.stringify(restArgs), opts.queue, opts.maxAttempts];
 
     if (opts.tags !== undefined) {
       columns.push('tags');
@@ -80,7 +81,7 @@ export default class PgDriver implements Driver {
       finalizedAt: row.finalized_at,
       scheduledAt: row.scheduled_at,
       priority: row.priority,
-      args: row.args,
+      args: { ...row.args, kind: row.kind },
       attemptedBy: row.attempted_by,
       errors: row.errors,
       kind: row.kind,
