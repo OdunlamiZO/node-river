@@ -76,7 +76,10 @@ describe('RiverClient Integration', () => {
 
   it('should connect to the database', async () => {
     expect(dbUrl).toBeDefined();
-    client = new RiverClient(new PgDriver({ connectionString: dbUrl! }), {});
+    client = new RiverClient(new PgDriver({ connectionString: dbUrl! }), {
+      defaultQueue: 'default',
+      maxAttempts: 1,
+    });
     await expect(client.verifyConnection()).resolves.not.toThrow();
   });
 
@@ -88,10 +91,8 @@ describe('RiverClient Integration', () => {
 
     // Enqueue a sort job
     const unsorted = ['banana', 'apple', 'cherry'];
-    await client.insert(
-      { kind: 'sort_args', strings: unsorted },
-      { queue: 'default', maxAttempts: 1 },
-    );
+    // console.log(await client.insert({ kind: 'sort_args', strings: unsorted }));
+    await client.insert({ kind: 'sort_args', strings: unsorted });
 
     // Wait for the file to appear and check contents
     await new Promise((resolve, reject) => {

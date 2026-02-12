@@ -1,8 +1,10 @@
 // RiverQueue driver implementation using the 'pg' library.
+import { Buffer } from 'buffer';
 import { Pool, PoolConfig } from 'pg';
+import { InsertOpts, Job, JobArgs } from '../../types';
+import { bitmaskToJobStates } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
-import { JobArgs, Job, InsertOpts } from '../../types';
 
 // Implements the RiverQueue Driver interface using the 'pg' library.
 export default class PgDriver implements Driver {
@@ -65,31 +67,36 @@ export default class PgDriver implements Driver {
     }
 
     const placeholders = columns.map((_, i) => `$${i + 1}`);
-    const query = `INSERT INTO river_job (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
-    const result = await this.pool.query(query, values);
+    const query = `INSERT INTO river_job (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING
+      id,
+      state,
+      attempt,
+      max_attempts as "maxAttempts",
+      attempted_at as "attemptedAt",
+      created_at as "createdAt",
+      finalized_at as "finalizedAt",
+      scheduled_at as "scheduledAt",
+      priority,
+      args,
+      attempted_by as "attemptedBy",
+      errors,
+      kind,
+      metadata,
+      queue,
+      tags,
+      unique_key as "uniqueKey",
+      unique_states as "uniqueStates"`;
+    const result = await this.pool.query<
+      Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
+    >(query, values);
 
     const row = result.rows[0];
     if (!row) return row;
 
     return {
-      id: row.id,
-      state: row.state,
-      attempt: row.attempt,
-      maxAttempts: row.max_attempts,
-      attemptedAt: row.attempted_at,
-      createdAt: row.created_at,
-      finalizedAt: row.finalized_at,
-      scheduledAt: row.scheduled_at,
-      priority: row.priority,
+      ...row,
       args: { ...row.args, kind: row.kind },
-      attemptedBy: row.attempted_by,
-      errors: row.errors,
-      kind: row.kind,
-      metadata: row.metadata,
-      queue: row.queue,
-      tags: row.tags,
-      uniqueKey: row.unique_key,
-      uniqueStates: row.unique_states,
+      uniqueStates: bitmaskToJobStates(row.uniqueStates),
     };
   }
 }

@@ -1,7 +1,7 @@
+import { Buffer } from 'buffer';
 import { JobState } from './enums';
 import AttemptError from './error';
 import JobArgs from './job-args';
-import { Buffer } from 'buffer';
 /**
  * Represents a job persisted in the database, including its state, metadata, and scheduling information.
  */
