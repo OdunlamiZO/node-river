@@ -1,4 +1,4 @@
-// jest.setTimeout(30000);
+jest.setTimeout(30000); // Set timeout to 30 seconds for integration tests, increase as required
 
 import { RiverClient } from '../../src';
 import { PgDriver } from '../../src/drivers/pg';
@@ -12,7 +12,6 @@ describe('RiverClient Integration', () => {
   };
 
   beforeAll((done) => {
-    jest.setTimeout(30000);
     // Start the Go engine before running tests
     const { spawn } = require('child_process');
 
@@ -24,13 +23,26 @@ describe('RiverClient Integration', () => {
     // Remove old file if it exists
     if (fs.existsSync(dbUrlPath)) fs.unlinkSync(dbUrlPath);
 
-    goProcess = spawn('go', ['run', 'main.go'], {
-      cwd: goEngineDir,
-      stdio: 'inherit',
-      detached: true,
-    });
+    const mainBinary = path.join(goEngineDir, 'main');
+    if (fs.existsSync(mainBinary)) {
+      // CI or local build: run the built binary
+      goProcess = spawn(mainBinary, [], {
+        cwd: goEngineDir,
+        stdio: 'inherit',
+        detached: true,
+      });
+    } else {
+      // Local dev: fallback to go run main.go
+      goProcess = spawn('go', ['run', 'main.go'], {
+        cwd: goEngineDir,
+        stdio: 'inherit',
+        detached: true,
+      });
+    }
 
-    // Poll for the db-url.json file to appear
+    // Poll for the db-url.json file to appear, with timeout
+    const start = Date.now();
+    const maxWait = 20000; // 20 seconds
     const pollForDbUrl = () => {
       if (fs.existsSync(dbUrlPath)) {
         const content = fs.readFileSync(dbUrlPath, 'utf8');
@@ -42,6 +54,8 @@ describe('RiverClient Integration', () => {
           process.stderr.write(`[test] Failed to parse DB URL JSON: ${e}\n`);
           done(e);
         }
+      } else if (Date.now() - start > maxWait) {
+        done(new Error('Timed out waiting for db-url.json'));
       } else {
         setTimeout(pollForDbUrl, 100);
       }
