@@ -20,7 +20,7 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm run test -- --coverage
+        run: npm run test -- --coverage --detectOpenHandles
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
