@@ -2,8 +2,8 @@ coverage:
   status:
     project:
       default:
-        target: 57.5%       # Set your desired threshold here
-        threshold: 0%       # Allowed drop before failing
+        target: 57.5% # Set your desired threshold here
+        threshold: 0% # Allowed drop before failing
         if_no_uploads: error
         informational: false
     patch:

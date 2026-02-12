@@ -23,11 +23,22 @@ describe('RiverClient Integration', () => {
     // Remove old file if it exists
     if (fs.existsSync(dbUrlPath)) fs.unlinkSync(dbUrlPath);
 
-    goProcess = spawn('go', ['run', 'main.go'], {
-      cwd: goEngineDir,
-      stdio: 'inherit',
-      detached: true,
-    });
+    const mainBinary = path.join(goEngineDir, 'main');
+    if (fs.existsSync(mainBinary)) {
+      // CI or local build: run the built binary
+      goProcess = spawn(mainBinary, [], {
+        cwd: goEngineDir,
+        stdio: 'inherit',
+        detached: true,
+      });
+    } else {
+      // Local dev: fallback to go run main.go
+      goProcess = spawn('go', ['run', 'main.go'], {
+        cwd: goEngineDir,
+        stdio: 'inherit',
+        detached: true,
+      });
+    }
 
     // Poll for the db-url.json file to appear
     const pollForDbUrl = () => {
