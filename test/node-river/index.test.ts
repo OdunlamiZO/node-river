@@ -1,4 +1,4 @@
-jest.setTimeout(30000);
+jest.setTimeout(30000); // Set timeout to 30 seconds for integration tests, increase as required
 
 import { RiverClient } from '../../src';
 import { PgDriver } from '../../src/drivers/pg';
@@ -40,7 +40,9 @@ describe('RiverClient Integration', () => {
       });
     }
 
-    // Poll for the db-url.json file to appear
+    // Poll for the db-url.json file to appear, with timeout
+    const start = Date.now();
+    const maxWait = 20000; // 20 seconds
     const pollForDbUrl = () => {
       if (fs.existsSync(dbUrlPath)) {
         const content = fs.readFileSync(dbUrlPath, 'utf8');
@@ -52,6 +54,8 @@ describe('RiverClient Integration', () => {
           process.stderr.write(`[test] Failed to parse DB URL JSON: ${e}\n`);
           done(e);
         }
+      } else if (Date.now() - start > maxWait) {
+        done(new Error('Timed out waiting for db-url.json'));
       } else {
         setTimeout(pollForDbUrl, 100);
       }
