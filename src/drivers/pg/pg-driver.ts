@@ -21,7 +21,7 @@ export default class PgDriver implements Driver {
     this.pool = new Pool(config);
   }
 
-  async connected(): Promise<void> {
+  async verifyConnection(): Promise<void> {
     try {
       const client = await this.pool.connect();
       try {
@@ -34,6 +34,10 @@ export default class PgDriver implements Driver {
         `Database connection failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
   }
 
   async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<Job> {

@@ -1,15 +1,12 @@
 import js from '@eslint/js';
-import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import tseslint from '@typescript-eslint/eslint-plugin';
 import prettierPlugin from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
 
-/** @type {import("eslint").Linter.Config} */
 export default [
   js.configs.recommended,
-  {
-    ignores: ['dist/**', 'node_modules/**'],
-  },
+
   {
     files: ['**/*.ts', '**/*.js'],
     ignores: ['dist/**', 'node_modules/**'],
@@ -17,16 +14,9 @@ export default [
       parser: tsParser,
       parserOptions: {
         project: './tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
         sourceType: 'module',
         ecmaVersion: 2021,
-      },
-      ecmaVersion: 2021,
-      sourceType: 'module',
-      globals: {
-        require: 'readonly',
-        module: 'readonly',
-        __dirname: 'readonly',
-        process: 'readonly',
       },
     },
     plugins: {
@@ -37,6 +27,27 @@ export default [
       ...tseslint.configs.recommended.rules,
       ...prettierConfig.rules,
       'prettier/prettier': 'error',
+    },
+  },
+  {
+    files: ['test/**/*.ts'],
+    languageOptions: {
+      globals: {
+        describe: true,
+        it: true,
+        expect: true,
+        beforeAll: true,
+        afterAll: true,
+        jest: true,
+        require: true,
+        __dirname: true,
+        process: true,
+        setTimeout: true,
+        Buffer: true,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 ];

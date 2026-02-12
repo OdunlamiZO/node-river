@@ -19,6 +19,20 @@ export class RiverClient {
   }
 
   /**
+   * Checks if the driver can connect to the database. Throws on failure.
+   */
+  verifyConnection(): Promise<void> {
+    return this.driver.verifyConnection();
+  }
+
+  /**
+   * Closes all database connections and cleans up resources.
+   */
+  close(): Promise<void> {
+    return this.driver.close();
+  }
+
+  /**
    * Inserts a job into the queue with the specified arguments and options.
    * @param args - The job arguments to insert.
    * @param opts - Optional insertion options.

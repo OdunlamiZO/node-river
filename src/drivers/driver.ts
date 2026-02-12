@@ -5,9 +5,14 @@ import { InsertOpts, Job, JobArgs } from '../types';
  */
 export default interface Driver {
   /**
-   * Checks if the driver can connect to the database.
+   * Checks if the driver can connect to the database. Throws on failure.
    */
-  connected(): Promise<void>;
+  verifyConnection(): Promise<void>;
+
+  /**
+   * Closes all database connections and cleans up resources.
+   */
+  close(): Promise<void>;
 
   /**
    * Inserts a new job into the queue using the provided arguments and options.
