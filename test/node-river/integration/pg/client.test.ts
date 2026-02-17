@@ -1,12 +1,12 @@
-jest.setTimeout(40000); // Set timeout to 30 seconds for integration tests, increase as required
+jest.setTimeout(40000); // Set timeout to 40 seconds for integration tests, increase as required
 
-import { RiverClient } from '../../src';
-import { PgDriver } from '../../src/drivers/pg';
+import { RiverClient } from '../../../../src';
+import { PgDriver } from '../../../../src/drivers/pg';
 
 let dbUrl: string | undefined;
 let client: RiverClient;
 
-describe('RiverClient Integration', () => {
+describe('RiverClient Integration (pg-driver)', () => {
   let goProcess: {
     pid: number;
   };
@@ -17,7 +17,7 @@ describe('RiverClient Integration', () => {
 
     const path = require('path');
     const fs = require('fs');
-    const goEngineDir = path.resolve(__dirname, '../go-engine');
+    const goEngineDir = path.resolve(__dirname, '../../../go-engine');
 
     const dbUrlPath = '/tmp/db-url.json';
     // Remove old file if it exists

@@ -60,7 +60,7 @@ export default class PgDriver implements Driver {
       const stateList = opts.uniqueOpts?.byState || [];
 
       let query = 'SELECT * FROM river_job WHERE unique_key = $1';
-      let values: (Buffer | string | number | string[])[] = [uniqueKey];
+      let values: (Buffer | string[])[] = [uniqueKey];
 
       if (stateList.length > 0) {
         query += ' AND state = ANY($2)';
@@ -82,7 +82,7 @@ export default class PgDriver implements Driver {
 
     const { kind, ...restArgs } = args;
     const columns = ['kind', 'args', 'queue', 'max_attempts'];
-    const values: (string | number | string[] | Buffer)[] = [
+    const values: (string | number | Buffer)[] = [
       kind,
       JSON.stringify(restArgs),
       opts.queue,

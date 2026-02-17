@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
-import { InsertOpts, JobArgs, JobState } from '../../../src/types';
-import { bitmaskToJobStates, mapToUniqueKey } from '../../../src/utils';
+import { InsertOpts, JobArgs, JobState } from '../../../../src/types';
+import { bitmaskToJobStates, mapToUniqueKey } from '../../../../src/utils';
 
 describe('bitmaskToJobStates', () => {
   it('returns null for null or empty buffer', () => {
