@@ -1,5 +1,5 @@
 import { Driver } from './drivers';
-import { ClientConfiguration, InsertOpts, Job, JobArgs } from './types';
+import { ClientConfiguration, InsertOpts, InsertResult, JobArgs } from './types';
 
 /**
  * Provides methods to enqueue jobs and manage queue operations.
@@ -36,14 +36,16 @@ export class RiverClient {
    * Inserts a job into the queue with the specified arguments and options.
    * @param args - The job arguments to insert.
    * @param opts - Optional insertion options.
-   * @returns A promise that resolves to the inserted Job.
+   * @returns A promise that resolves to the result of the insertion operation,
+   *          including the job and whether the insert was skipped due to uniqueness.
    */
-  insert(args: JobArgs, opts: InsertOpts = {}): Promise<Job> {
+  insert<T extends JobArgs>(args: T, opts: InsertOpts = {}): Promise<InsertResult<T>> {
     const defaultOpts: InsertOpts = {
       queue: this.configuration.defaultQueue,
       maxAttempts: this.configuration.maxAttempts,
       ...opts,
     };
+
     return this.driver.insert(args, defaultOpts);
   }
 }

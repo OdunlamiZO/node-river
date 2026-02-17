@@ -1,8 +1,8 @@
 // RiverQueue driver implementation using the 'pg' library.
 import { Buffer } from 'buffer';
 import { Pool, PoolConfig } from 'pg';
-import { InsertOpts, Job, JobArgs } from '../../types';
-import { bitmaskToJobStates } from '../../utils';
+import { InsertOpts, InsertResult, Job, JobArgs } from '../../types';
+import { bitmaskToJobStates, mapToUniqueKey } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
 
@@ -42,28 +42,78 @@ export default class PgDriver implements Driver {
     await this.pool.end();
   }
 
-  async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<Job> {
+  async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<InsertResult<T>> {
+    if (!opts.queue) {
+      throw new Error('Queue name is required in InsertOpts');
+    }
+
+    if (!opts.maxAttempts) {
+      throw new Error('maxAttempts is required in InsertOpts');
+    }
+
+    let uniqueKey: Buffer | undefined;
+    if (opts.uniqueOpts) {
+      uniqueKey = mapToUniqueKey(args, opts);
+    }
+
+    if (uniqueKey) {
+      const stateList = opts.uniqueOpts?.byState || [];
+
+      let query = 'SELECT * FROM river_job WHERE unique_key = $1';
+      let values: (Buffer | string | number | string[])[] = [uniqueKey];
+
+      if (stateList.length > 0) {
+        query += ' AND state = ANY($2)';
+        values.push(stateList);
+      }
+
+      query += ' LIMIT 1';
+
+      const result = await this.pool.query<
+        Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
+      >(query, values);
+
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+
+        return this.mapRowToInsertResult(row, true);
+      }
+    }
+
     const { kind, ...restArgs } = args;
     const columns = ['kind', 'args', 'queue', 'max_attempts'];
-    const values = [kind, JSON.stringify(restArgs), opts.queue, opts.maxAttempts];
+    const values: (string | number | string[] | Buffer)[] = [
+      kind,
+      JSON.stringify(restArgs),
+      opts.queue,
+      opts.maxAttempts,
+    ];
 
-    if (opts.tags !== undefined) {
+    if (opts.tags) {
       columns.push('tags');
       values.push(JSON.stringify(opts.tags));
     }
-    if (opts.priority !== undefined) {
+
+    if (opts.priority) {
       columns.push('priority');
       values.push(opts.priority);
     }
-    if (opts.metadata !== undefined) {
+
+    if (opts.metadata) {
       columns.push('metadata');
       values.push(JSON.stringify(opts.metadata));
     }
-    if (opts.scheduledAt !== undefined) {
+
+    if (opts.scheduledAt) {
       columns.push('scheduled_at');
       values.push(
         opts.scheduledAt instanceof Date ? opts.scheduledAt.toISOString() : opts.scheduledAt,
       );
+    }
+
+    if (uniqueKey) {
+      columns.push('unique_key');
+      values.push(uniqueKey);
     }
 
     const placeholders = columns.map((_, i) => `$${i + 1}`);
@@ -93,10 +143,23 @@ export default class PgDriver implements Driver {
     const row = result.rows[0];
     if (!row) return row;
 
+    return this.mapRowToInsertResult(row, false);
+  }
+
+  /**
+   * Helper to map a DB row to a Job<T> and InsertResult.
+   */
+  private mapRowToInsertResult<T extends JobArgs>(
+    row: Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null },
+    skipped: boolean,
+  ): InsertResult<T> {
     return {
-      ...row,
-      args: { ...row.args, kind: row.kind },
-      uniqueStates: bitmaskToJobStates(row.uniqueStates),
+      job: {
+        ...row,
+        args: { ...row.args, kind: row.kind } as T,
+        uniqueStates: bitmaskToJobStates(row.uniqueStates),
+      },
+      skipped,
     };
   }
 }

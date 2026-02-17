@@ -1,3 +1,3 @@
-import { bitmaskToJobStates } from './mappers';
+import { bitmaskToJobStates, mapToUniqueKey } from './mappers';
 
-export { bitmaskToJobStates };
+export { bitmaskToJobStates, mapToUniqueKey };
