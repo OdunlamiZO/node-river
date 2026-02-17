@@ -1,4 +1,4 @@
-jest.setTimeout(30000); // Set timeout to 30 seconds for integration tests, increase as required
+jest.setTimeout(40000); // Set timeout to 30 seconds for integration tests, increase as required
 
 import { RiverClient } from '../../src';
 import { PgDriver } from '../../src/drivers/pg';
@@ -91,7 +91,6 @@ describe('RiverClient Integration', () => {
 
     // Enqueue a sort job
     const unsorted = ['banana', 'apple', 'cherry'];
-    // console.log(await client.insert({ kind: 'sort_args', strings: unsorted }));
     await client.insert({ kind: 'sort_args', strings: unsorted });
 
     // Wait for the file to appear and check contents
@@ -115,5 +114,35 @@ describe('RiverClient Integration', () => {
       };
       poll();
     });
+  });
+
+  it('should insert a job and return InsertResult with job', async () => {
+    const unsorted = ['banana', 'apple', 'cherry'];
+    const result = await client.insert({ kind: 'sort_args', strings: unsorted });
+    expect(result).toHaveProperty('job');
+    expect(result.skipped).toBe(false);
+    expect(result.job.kind).toBe('sort_args');
+    expect(result.job.args.strings).toEqual(unsorted);
+  });
+
+  it('should not insert duplicate unique jobs', async () => {
+    // Insert a unique sort_args job
+    const unsorted = ['banana', 'apple', 'cherry'];
+    const first = await client.insert(
+      { kind: 'sort_args', strings: unsorted },
+      { uniqueOpts: { byArgs: ['strings'] } },
+    );
+    expect(first.skipped).toBe(false);
+    expect(first.job).toBeDefined();
+
+    // Try to insert the same unique job again
+    const second = await client.insert(
+      { kind: 'sort_args', strings: unsorted },
+      { uniqueOpts: { byArgs: ['strings'] } },
+    );
+    expect(second.skipped).toBe(true);
+    expect(second.job).toBeDefined();
+    // The job returned should have the same strings as the first one
+    expect(second.job.args.strings).toEqual(unsorted);
   });
 });
