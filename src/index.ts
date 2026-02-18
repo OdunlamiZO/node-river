@@ -1,3 +1,3 @@
-import { RiverClient } from './client';
+import RiverClient from './client';
 
 export { RiverClient };
