@@ -57,7 +57,7 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
-  "dependencies": {
-    "pg": "^8.18.0"
+  "peerDependencies": {
+    "pg": ">=8.0.0"
   }
 }
