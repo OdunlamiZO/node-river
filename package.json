@@ -1,5 +1,5 @@
 {
-  "name": "node-river",
+  "name": "@odunlamizo/node-river",
   "version": "1.0.0",
   "description": "Node.js library to support riverqueue integration.",
   "type": "module",
