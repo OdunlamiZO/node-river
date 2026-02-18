@@ -1,13 +1,13 @@
 // RiverQueue driver implementation using the 'pg' library.
 import { Buffer } from 'buffer';
-import { Pool, PoolConfig } from 'pg';
+import { Pool, PoolClient, PoolConfig } from 'pg';
 import { InsertOpts, InsertResult, Job, JobArgs } from '../../types';
 import { bitmaskToJobStates, mapToUniqueKey } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
 
 // Implements the RiverQueue Driver interface using the 'pg' library.
-export default class PgDriver implements Driver {
+export default class PgDriver implements Driver<PoolClient> {
   private readonly pool: Pool;
 
   /**
@@ -43,6 +43,19 @@ export default class PgDriver implements Driver {
   }
 
   async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<InsertResult<T>> {
+    const client = await this.pool.connect();
+    try {
+      return await this.insertTx(client, args, opts);
+    } finally {
+      client.release();
+    }
+  }
+
+  async insertTx<T extends JobArgs>(
+    tx: PoolClient,
+    args: T,
+    opts: InsertOpts,
+  ): Promise<InsertResult<T>> {
     if (!opts.queue) {
       throw new Error('Queue name is required in InsertOpts');
     }
@@ -69,9 +82,10 @@ export default class PgDriver implements Driver {
 
       query += ' LIMIT 1';
 
-      const result = await this.pool.query<
-        Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
-      >(query, values);
+      const result = await tx.query<Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }>(
+        query,
+        values,
+      );
 
       if (result.rows.length > 0) {
         const row = result.rows[0];
@@ -136,14 +150,43 @@ export default class PgDriver implements Driver {
       tags,
       unique_key as "uniqueKey",
       unique_states as "uniqueStates"`;
-    const result = await this.pool.query<
-      Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
-    >(query, values);
+    const result = await tx.query<Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }>(
+      query,
+      values,
+    );
 
     const row = result.rows[0];
     if (!row) return row;
 
     return this.mapRowToInsertResult(row, false);
+  }
+
+  async insertMany<T extends JobArgs>(
+    jobs: { args: T; opts: InsertOpts }[],
+  ): Promise<InsertResult<T>[]> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const results: InsertResult<T>[] = [];
+      for (const job of jobs) {
+        results.push(await this.insertTx(client, job.args, job.opts));
+      }
+
+      await client.query('COMMIT');
+
+      return results;
+    } catch (error) {
+      await client.query('ROLLBACK');
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTx(): Promise<PoolClient> {
+    return this.pool.connect();
   }
 
   /**

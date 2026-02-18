@@ -1,10 +1,13 @@
 jest.setTimeout(40000); // Set timeout to 40 seconds for integration tests, increase as required
 
+import { beforeEach } from '@jest/globals';
+import { PoolClient } from 'pg';
 import { RiverClient } from '../../../../src';
 import { PgDriver } from '../../../../src/drivers/pg';
 
 let dbUrl: string | undefined;
-let client: RiverClient;
+let driver: PgDriver;
+let client: RiverClient<typeof driver, PoolClient>;
 
 describe('RiverClient Integration (pg-driver)', () => {
   let goProcess: {
@@ -74,9 +77,21 @@ describe('RiverClient Integration (pg-driver)', () => {
     }
   });
 
+  beforeEach(async () => {
+    if (driver) {
+      const tx = await driver.getTx();
+      try {
+        await tx.query("DELETE FROM river_job WHERE queue = 'default'");
+      } finally {
+        tx.release();
+      }
+    }
+  });
+
   it('should connect to the database', async () => {
     expect(dbUrl).toBeDefined();
-    client = new RiverClient(new PgDriver({ connectionString: dbUrl! }), {
+    driver = new PgDriver({ connectionString: dbUrl! });
+    client = new RiverClient(driver, {
       defaultQueue: 'default',
       maxAttempts: 1,
     });
@@ -144,5 +159,48 @@ describe('RiverClient Integration (pg-driver)', () => {
     expect(second.job).toBeDefined();
     // The job returned should have the same strings as the first one
     expect(second.job.args.strings).toEqual(unsorted);
+  });
+
+  it('should insert a job within a transaction using insertTx', async () => {
+    const tx = await driver.getTx();
+    try {
+      await tx.query('BEGIN');
+      const args = { kind: 'sort_args', strings: ['x', 'y', 'z'] };
+      const result = await client.insertTx(tx, args);
+      expect(result.job).toBeDefined();
+      expect(result.job.kind).toBe('sort_args');
+      expect(result.job.args.strings).toEqual(['x', 'y', 'z']);
+      await tx.query('ROLLBACK');
+    } finally {
+      tx.release();
+    }
+  });
+
+  it('should insert multiple jobs transactionally using insertMany', async () => {
+    const jobs = [
+      { args: { kind: 'sort_args', strings: ['a', 'b'] }, opts: {} },
+      { args: { kind: 'sort_args', strings: ['c', 'd'] }, opts: {} },
+    ];
+    const results = await client.insertMany(jobs);
+    expect(results.length).toBe(2);
+    expect(results[0].job.args.strings).toEqual(['a', 'b']);
+    expect(results[1].job.args.strings).toEqual(['c', 'd']);
+  });
+
+  it('should rollback all inserts if one fails in insertMany', async () => {
+    const jobs = [
+      { args: { kind: 'sort_args', strings: ['foo'] }, opts: {} },
+      // This job is missing a required field or will cause failure
+      { args: { kind: 'sort_args', strings: ['bar'] }, opts: { maxAttempts: undefined } },
+    ];
+    await expect(client.insertMany(jobs)).rejects.toThrow();
+    // Ensure no jobs were inserted
+    const tx = await driver.getTx();
+    try {
+      const res = await tx.query("SELECT * FROM river_job WHERE queue = 'default'");
+      expect(res.rows.length).toBe(0);
+    } finally {
+      tx.release();
+    }
   });
 });
