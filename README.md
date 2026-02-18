@@ -41,7 +41,7 @@ console.log(result.job); // Job details
 ```ts
 const result = await client.insert(
   { kind: 'sort_args', strings: ['banana', 'apple', 'cherry'] },
-  { uniqueOpts: { byArgs: ['strings'] } }
+  { uniqueOpts: { byArgs: ['strings'] } },
 );
 console.log(result.skipped); // true if duplicate
 ```

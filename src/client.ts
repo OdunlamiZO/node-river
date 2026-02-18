@@ -4,7 +4,7 @@ import { ClientConfiguration, InsertOpts, InsertResult, JobArgs } from './types'
 /**
  * Provides methods to enqueue jobs and manage queue operations.
  */
-export class RiverClient<D extends Driver<Tx>, Tx> {
+export default class RiverClient<D extends Driver<Tx>, Tx> {
   private readonly driver: D;
   private readonly configuration: ClientConfiguration;
 
