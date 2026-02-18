@@ -1,7 +1,7 @@
 {
   "name": "@odunlamizo/node-river",
   "version": "1.0.4",
-  "description": "Node.js library to support riverqueue integration.",
+  "description": "Node.js library to support River integration.",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
