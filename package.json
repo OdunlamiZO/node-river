@@ -34,7 +34,7 @@
     "library"
   ],
   "author": "Odunlami Zacchaeus",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/OdunlamiZO/node-river/issues"
   },
