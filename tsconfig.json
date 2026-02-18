@@ -12,5 +12,5 @@
     "skipLibCheck": true
   },
   "exclude": ["node_modules", "dist"],
-  "include": ["src/**/*", "test/**/*.ts", "jest.config.js"]
+  "include": ["src/**/*", "test/**/*.ts", "jest.config.js", "tsup.config.ts", "eslint.config.js"]
 }

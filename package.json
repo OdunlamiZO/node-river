@@ -9,9 +9,26 @@
   "files": [
     "dist"
   ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./drivers/pg": {
+      "types": "./dist/drivers/pg/index.d.ts",
+      "import": "./dist/drivers/pg/index.mjs",
+      "require": "./dist/drivers/pg/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.js"
+    }
+  },
   "scripts": {
-    "build": "tsup src/index.ts --dts --format cjs,esm",
-    "dev": "tsup src/index.ts --watch --dts --format cjs,esm",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "test": "jest --runInBand",
     "lint": "eslint . --ext .ts,.js --ignore-pattern eslint.config.js",
     "format": "prettier --write .",
