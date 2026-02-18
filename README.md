@@ -1,6 +1,6 @@
 # node-river
 
-A Node.js job queue and workflow engine with PostgreSQL support.
+Node.js library to support River integration.
 
 ## Installation
 
