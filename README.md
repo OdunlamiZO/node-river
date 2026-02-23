@@ -5,7 +5,7 @@ Node.js library to support River integration.
 ## Installation
 
 ```bash
-npm install node-river
+npm install @odunlamizo/node-river
 ```
 
 ## Usage
