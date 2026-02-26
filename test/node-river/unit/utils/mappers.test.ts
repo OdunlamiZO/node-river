@@ -52,33 +52,33 @@ describe('mapToUniqueKey', () => {
   };
 
   it('returns undefined if uniqueOpts is not set', () => {
-    const opts: InsertOpts = {};
+    const opts: InsertOpts = { queue: 'default' };
     expect(mapToUniqueKey(baseArgs, opts)).toBeUndefined();
   });
 
   it('includes kind by default', () => {
-    const opts: InsertOpts = { uniqueOpts: {} };
+    const opts: InsertOpts = { queue: 'default', uniqueOpts: {} };
     const key1 = mapToUniqueKey(baseArgs, opts);
     const key2 = mapToUniqueKey({ ...baseArgs, kind: 'other' }, opts);
     expect(key1).not.toEqual(key2);
   });
 
   it('excludes kind if excludeKind is true', () => {
-    const opts: InsertOpts = { uniqueOpts: { excludeKind: true } };
+    const opts: InsertOpts = { queue: 'default', uniqueOpts: { excludeKind: true } };
     const key1 = mapToUniqueKey(baseArgs, opts);
     const key2 = mapToUniqueKey({ ...baseArgs, kind: 'other' }, opts);
     expect(key1).toEqual(key2);
   });
 
   it('uses all args if byArgs is true', () => {
-    const opts: InsertOpts = { uniqueOpts: { byArgs: true } };
+    const opts: InsertOpts = { queue: 'default', uniqueOpts: { byArgs: true } };
     const key1 = mapToUniqueKey(baseArgs, opts);
     const key2 = mapToUniqueKey({ ...baseArgs, userId: 456 }, opts);
     expect(key1).not.toEqual(key2);
   });
 
   it('uses only specified args if byArgs is an array', () => {
-    const opts: InsertOpts = { uniqueOpts: { byArgs: ['userId'] } };
+    const opts: InsertOpts = { queue: 'default', uniqueOpts: { byArgs: ['userId'] } };
     const key1 = mapToUniqueKey(baseArgs, opts);
     const key2 = mapToUniqueKey({ ...baseArgs, userId: 456 }, opts);
     expect(key1).not.toEqual(key2);
@@ -88,20 +88,21 @@ describe('mapToUniqueKey', () => {
   });
 
   it('includes queue if byQueue is true', () => {
-    const opts: InsertOpts = { uniqueOpts: { byQueue: true }, queue: 'q1' };
+    const opts: InsertOpts = { queue: 'q1', uniqueOpts: { byQueue: true } };
     const key1 = mapToUniqueKey(baseArgs, opts);
     const key2 = mapToUniqueKey(baseArgs, { ...opts, queue: 'q2' });
     expect(key1).not.toEqual(key2);
   });
 
   it('includes period if byPeriod is set', () => {
-    const opts = {
+    const opts: InsertOpts = {
+      queue: 'default',
       uniqueOpts: { byPeriod: 60 },
       scheduledAt: new Date('2024-01-01T00:01:30Z'),
     };
     const key1 = mapToUniqueKey(baseArgs, opts);
 
-    const opts2 = {
+    const opts2: InsertOpts = {
       ...opts,
       scheduledAt: new Date('2024-01-01T00:01:59Z'),
     };
@@ -109,7 +110,7 @@ describe('mapToUniqueKey', () => {
 
     expect(key1?.toString('hex')).toEqual(key2?.toString('hex'));
 
-    const opts3 = {
+    const opts3: InsertOpts = {
       ...opts,
       scheduledAt: new Date('2024-01-01T00:02:00Z'),
     };

@@ -1,7 +1,7 @@
 // RiverQueue driver implementation using the 'pg' library.
 import { Buffer } from 'buffer';
 import { Pool, PoolClient, PoolConfig } from 'pg';
-import { InsertOpts, InsertResult, Job, JobArgs } from '../../types';
+import { InsertOpts, InsertResult, Job, JobArgs, JobState } from '../../types';
 import { bitmaskToJobStates, mapToUniqueKey } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
@@ -56,10 +56,6 @@ export default class PgDriver implements Driver<PoolClient> {
     args: T,
     opts: InsertOpts,
   ): Promise<InsertResult<T>> {
-    if (!opts.queue) {
-      throw new Error('Queue name is required in InsertOpts');
-    }
-
     if (!opts.maxAttempts) {
       throw new Error('maxAttempts is required in InsertOpts');
     }
@@ -187,6 +183,85 @@ export default class PgDriver implements Driver<PoolClient> {
 
   async getTx(): Promise<PoolClient> {
     return this.pool.connect();
+  }
+
+  async getAvailableJobs(queue: string, limit: number, clientId: string): Promise<Job[]> {
+    const result = await this.pool.query<Job>(
+      `
+      UPDATE river_job
+      SET state = 'running',
+          attempt = attempt + 1,
+          attempted_at = NOW(),
+          attempted_by = array_append(COALESCE(attempted_by, '{}'), $1)
+      WHERE id IN (
+        SELECT id FROM river_job
+        WHERE state = 'available'
+          AND queue = $2
+          AND scheduled_at <= NOW()
+        ORDER BY priority, scheduled_at, id
+        LIMIT $3
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING
+        id,
+        state,
+        attempt,
+        max_attempts as "maxAttempts",
+        attempted_at as "attemptedAt",
+        created_at as "createdAt",
+        finalized_at as "finalizedAt",
+        scheduled_at as "scheduledAt",
+        priority,
+        args,
+        attempted_by as "attemptedBy",
+        errors,
+        kind,
+        metadata,
+        queue,
+        tags,
+        unique_key as "uniqueKey",
+        unique_states as "uniqueStates"
+    `,
+      [clientId, queue, limit],
+    );
+
+    return result.rows;
+  }
+
+  async completeJob(id: number): Promise<void> {
+    await this.pool.query(
+      `
+      UPDATE river_job
+      SET state = $1,
+          finalized_at = NOW()
+      WHERE id = $2
+    `,
+      [JobState.Completed, id],
+    );
+  }
+
+  async failJob(id: number, error: Error, attempt: number, maxAttempts: number): Promise<void> {
+    const isDiscarded = attempt >= maxAttempts;
+    const backoffSeconds = Math.pow(2, attempt);
+    const errorEntry = JSON.stringify({ error: error.message, attempt });
+
+    await this.pool.query(
+      `
+      UPDATE river_job
+      SET state = $1,
+          finalized_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
+          scheduled_at = CASE WHEN $2 THEN scheduled_at ELSE NOW() + ($3 || ' seconds')::interval END,
+          errors = array_append(COALESCE(errors, '{}'), $4::jsonb)
+      WHERE id = $5
+    `,
+      [
+        isDiscarded ? JobState.Discarded : JobState.Retryable,
+        isDiscarded,
+        backoffSeconds,
+        errorEntry,
+        id,
+      ],
+    );
   }
 
   /**

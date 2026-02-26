@@ -92,7 +92,6 @@ describe('RiverClient Integration (pg-driver)', () => {
     expect(dbUrl).toBeDefined();
     driver = new PgDriver({ connectionString: dbUrl! });
     client = new RiverClient(driver, {
-      defaultQueue: 'default',
       maxAttempts: 1,
     });
     await expect(client.verifyConnection()).resolves.not.toThrow();
@@ -106,7 +105,7 @@ describe('RiverClient Integration (pg-driver)', () => {
 
     // Enqueue a sort job
     const unsorted = ['banana', 'apple', 'cherry'];
-    await client.insert({ kind: 'sort_args', strings: unsorted });
+    await client.insert({ kind: 'sort_args', strings: unsorted }, { queue: 'default' });
 
     // Wait for the file to appear and check contents
     await new Promise((resolve, reject) => {
@@ -133,7 +132,10 @@ describe('RiverClient Integration (pg-driver)', () => {
 
   it('should insert a job and return InsertResult with job', async () => {
     const unsorted = ['banana', 'apple', 'cherry'];
-    const result = await client.insert({ kind: 'sort_args', strings: unsorted });
+    const result = await client.insert(
+      { kind: 'sort_args', strings: unsorted },
+      { queue: 'default' },
+    );
     expect(result).toHaveProperty('job');
     expect(result.skipped).toBe(false);
     expect(result.job.kind).toBe('sort_args');
@@ -145,7 +147,7 @@ describe('RiverClient Integration (pg-driver)', () => {
     const unsorted = ['banana', 'apple', 'cherry'];
     const first = await client.insert(
       { kind: 'sort_args', strings: unsorted },
-      { uniqueOpts: { byArgs: ['strings'] } },
+      { queue: 'default', uniqueOpts: { byArgs: ['strings'] } },
     );
     expect(first.skipped).toBe(false);
     expect(first.job).toBeDefined();
@@ -153,7 +155,7 @@ describe('RiverClient Integration (pg-driver)', () => {
     // Try to insert the same unique job again
     const second = await client.insert(
       { kind: 'sort_args', strings: unsorted },
-      { uniqueOpts: { byArgs: ['strings'] } },
+      { queue: 'default', uniqueOpts: { byArgs: ['strings'] } },
     );
     expect(second.skipped).toBe(true);
     expect(second.job).toBeDefined();
@@ -166,7 +168,7 @@ describe('RiverClient Integration (pg-driver)', () => {
     try {
       await tx.query('BEGIN');
       const args = { kind: 'sort_args', strings: ['x', 'y', 'z'] };
-      const result = await client.insertTx(tx, args);
+      const result = await client.insertTx(tx, args, { queue: 'default' });
       expect(result.job).toBeDefined();
       expect(result.job.kind).toBe('sort_args');
       expect(result.job.args.strings).toEqual(['x', 'y', 'z']);
@@ -178,8 +180,8 @@ describe('RiverClient Integration (pg-driver)', () => {
 
   it('should insert multiple jobs transactionally using insertMany', async () => {
     const jobs = [
-      { args: { kind: 'sort_args', strings: ['a', 'b'] }, opts: {} },
-      { args: { kind: 'sort_args', strings: ['c', 'd'] }, opts: {} },
+      { args: { kind: 'sort_args', strings: ['a', 'b'] }, opts: { queue: 'default' } },
+      { args: { kind: 'sort_args', strings: ['c', 'd'] }, opts: { queue: 'default' } },
     ];
     const results = await client.insertMany(jobs);
     expect(results.length).toBe(2);
@@ -189,9 +191,12 @@ describe('RiverClient Integration (pg-driver)', () => {
 
   it('should rollback all inserts if one fails in insertMany', async () => {
     const jobs = [
-      { args: { kind: 'sort_args', strings: ['foo'] }, opts: {} },
+      { args: { kind: 'sort_args', strings: ['foo'] }, opts: { queue: 'default' } },
       // This job is missing a required field or will cause failure
-      { args: { kind: 'sort_args', strings: ['bar'] }, opts: { maxAttempts: undefined } },
+      {
+        args: { kind: 'sort_args', strings: ['bar'] },
+        opts: { queue: 'default', maxAttempts: undefined },
+      },
     ];
     await expect(client.insertMany(jobs)).rejects.toThrow();
     // Ensure no jobs were inserted

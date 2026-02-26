@@ -10,9 +10,9 @@ export default interface InsertOpts {
   tags?: string[];
 
   /**
-   * Name of the job queue to insert into
+   * Name of the queue to insert the job into.
    */
-  queue?: string;
+  queue: string;
 
   /**
    * Job priority (1 = highest, 4 = lowest)

@@ -1,24 +1,24 @@
 /**
- * Represents a failed job attempt, including error details and stack trace.
+ * Represents the error details recorded for a single failed job attempt.
  */
 export default interface AttemptError {
   /**
-   * Time the error occurred
+   * ISO timestamp of when the error occurred.
    */
   at: string;
 
   /**
-   * Attempt number when the error occurred
+   * The attempt number that produced this error.
    */
   attempt: number;
 
   /**
-   * Stringified error or panic value
+   * The error message thrown by the worker.
    */
   error: string;
 
   /**
-   * Stack trace from a job that panicked
+   * Stack trace of the thrown error, if available.
    */
   trace: string;
 }

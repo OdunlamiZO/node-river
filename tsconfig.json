@@ -9,7 +9,8 @@
     "strict": true,
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node", "jest"]
   },
   "exclude": ["node_modules", "dist"],
   "include": ["src/**/*", "test/**/*.ts", "jest.config.js", "tsup.config.ts", "eslint.config.js"]

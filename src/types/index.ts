@@ -5,6 +5,7 @@ import InsertOpts from './insert-opts';
 import InsertResult from './insert-result';
 import Job from './job';
 import JobArgs from './job-args';
+import QueueConfiguration from './queue-config';
 import UniqueOpts from './unique-opts';
 
 export {
@@ -15,5 +16,6 @@ export {
   Job,
   JobArgs,
   JobState,
+  QueueConfiguration,
   UniqueOpts,
 };

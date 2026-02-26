@@ -1,47 +1,62 @@
+import os from 'os';
+import process from 'process';
+import { clearTimeout, setTimeout } from 'timers';
 import { Driver } from './drivers';
-import { ClientConfiguration, InsertOpts, InsertResult, JobArgs } from './types';
+import { ClientConfiguration, InsertOpts, InsertResult, Job, JobArgs } from './types';
+import Worker from './types/worker';
+import { CLIENT_CONFIGURATION_DEFAULTS } from './utils';
 
 /**
- * Provides methods to enqueue jobs and manage queue operations.
+ * RiverClient is the main entry point for interacting with the River job queue.
+ * It supports two usage modes:
+ * - Insertion only: enqueue jobs without processing them.
+ * - Worker mode: register workers and call `work()` to start polling and processing jobs.
  */
 export default class RiverClient<D extends Driver<Tx>, Tx> {
+  private readonly running: Map<string, number> = new Map();
+  private stopped = false;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly driver: D;
   private readonly configuration: ClientConfiguration;
+  private readonly workers: Map<string, Worker> = new Map();
+  private readonly clientId: string;
 
   /**
    * Creates a new RiverClient instance.
-   * @param driver - The queue driver implementation.
-   * @param configuration - Client configuration options.
+   * @param driver - The driver implementation (e.g. PgDriver).
+   * @param configuration - Client options: queues, max attempts, poll interval, and client ID.
    */
   constructor(driver: D, configuration: ClientConfiguration) {
     this.driver = driver;
     this.configuration = configuration;
+    this.clientId = configuration.clientId ?? `${os.hostname()}-${process.pid}`;
   }
 
   /**
-   * Checks if the driver can connect to the database. Throws on failure.
+   * Verifies the driver can reach the database. Throws if the connection fails.
    */
-  verifyConnection(): Promise<void> {
+  async verifyConnection(): Promise<void> {
     return this.driver.verifyConnection();
   }
 
   /**
-   * Closes all database connections and cleans up resources.
+   * Stops the polling loop (if running) and closes all database connections.
+   * Always call this on shutdown to avoid resource leaks.
    */
-  close(): Promise<void> {
-    return this.driver.close();
+  async close(): Promise<void> {
+    this.stopped = true;
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    await this.driver.close();
   }
 
   /**
-   * Inserts a job into the queue with the specified arguments and options.
-   * @param args - The job arguments to insert.
-   * @param opts - Optional insertion options.
-   * @returns A promise that resolves to the result of the insertion operation,
-   *          including the job and whether the insert was skipped due to uniqueness.
+   * Inserts a single job into the specified queue.
+   * @param args - Job arguments including `kind` and any job-specific fields.
+   * @param opts - Insertion options. `queue` is required; `maxAttempts` defaults to the client configuration value.
+   * @returns The inserted job and a `skipped` flag indicating if it was deduplicated.
    */
-  insert<T extends JobArgs>(args: T, opts: InsertOpts = {}): Promise<InsertResult<T>> {
+  async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<InsertResult<T>> {
     const defaultOpts: InsertOpts = {
-      queue: this.configuration.defaultQueue,
       maxAttempts: this.configuration.maxAttempts,
       ...opts,
     };
@@ -50,18 +65,15 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
   }
 
   /**
-   * Inserts a job into the queue within an existing transaction or session.
-   * The transaction type (Tx) is determined by the driver implementation.
-   *
-   * @param tx - The transaction or session object to use for the insert.
-   * @param args - The job arguments to insert.
-   * @param opts - Optional insertion options.
-   * @returns A promise that resolves to the result of the insertion operation,
-   *          including the job and whether the insert was skipped due to uniqueness.
+   * Inserts a single job within an existing transaction. Use this when the job
+   * should only be enqueued if the surrounding transaction commits.
+   * @param tx - The active transaction object (type is driver-specific).
+   * @param args - Job arguments including `kind` and any job-specific fields.
+   * @param opts - Insertion options. `queue` is required; `maxAttempts` defaults to the client configuration value.
+   * @returns The inserted job and a `skipped` flag indicating if it was deduplicated.
    */
-  insertTx<T extends JobArgs>(tx: Tx, args: T, opts: InsertOpts = {}): Promise<InsertResult<T>> {
+  async insertTx<T extends JobArgs>(tx: Tx, args: T, opts: InsertOpts): Promise<InsertResult<T>> {
     const defaultOpts: InsertOpts = {
-      queue: this.configuration.defaultQueue,
       maxAttempts: this.configuration.maxAttempts,
       ...opts,
     };
@@ -70,11 +82,9 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
   }
 
   /**
-   * Inserts multiple jobs in sequence within a single transaction.
-   * If any insert fails, all previous inserts in the batch are rolled back.
-   *
-   * @param jobs - Array of job argument and option pairs to insert.
-   * @returns A promise that resolves to an array of InsertResult objects for each job.
+   * Inserts multiple jobs in a single transaction. If any insert fails, all are rolled back.
+   * @param jobs - Array of `{ args, opts }` pairs. Each `opts` must include a `queue`.
+   * @returns An array of InsertResult objects in the same order as the input.
    */
   async insertMany<T extends JobArgs>(
     jobs: { args: T; opts: InsertOpts }[],
@@ -82,12 +92,83 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
     const jobsWithDefaults = jobs.map((job) => ({
       args: job.args,
       opts: {
-        queue: this.configuration.defaultQueue,
         maxAttempts: this.configuration.maxAttempts,
         ...job.opts,
       },
     }));
 
     return this.driver.insertMany(jobsWithDefaults);
+  }
+
+  /**
+   * Registers a worker for a specific job kind. When a job of this kind is claimed
+   * from the queue, the worker's `work()` method will be called with the job.
+   * Must be called before `work()` for the worker to receive jobs.
+   * @param kind - The job kind string that this worker handles (e.g. `"send_email"`).
+   * @param worker - The worker instance that implements the `Worker<T>` interface.
+   */
+  addWorker<T extends JobArgs>(kind: string, worker: Worker<T>): void {
+    this.workers.set(kind, worker);
+  }
+
+  /**
+   * Begins polling all configured queues and dispatching jobs to registered workers.
+   * Each queue is polled independently with its own concurrency limit.
+   * No-op if `queues` is not configured.
+   */
+  work(): void {
+    this.stopped = false;
+    this.poll();
+  }
+
+  private poll(): void {
+    if (this.stopped) return;
+
+    this.fetchAndWork().finally(() => {
+      this.pollTimer = setTimeout(
+        () => this.poll(),
+        this.configuration.pollInterval ?? CLIENT_CONFIGURATION_DEFAULTS.pollInterval,
+      );
+    });
+  }
+
+  private async fetchAndWork(): Promise<void> {
+    const queues = Object.entries(this.configuration.queues ?? {});
+
+    for (const [queue, queueConfig] of queues) {
+      const running = this.running.get(queue) ?? 0;
+      const slots = queueConfig.concurrency - running;
+      if (slots <= 0) continue;
+
+      const jobs = await this.driver.getAvailableJobs(queue, slots, this.clientId);
+
+      for (const job of jobs) {
+        this.running.set(job.queue, (this.running.get(job.queue) ?? 0) + 1);
+        this.processJob(job).finally(() => {
+          this.running.set(job.queue, Math.max(0, (this.running.get(job.queue) ?? 0) - 1));
+        });
+      }
+    }
+  }
+
+  private async processJob(job: Job): Promise<void> {
+    const worker = this.workers.get(job.kind);
+
+    if (!worker) {
+      await this.driver.failJob(
+        job.id,
+        new Error(`No worker registered for kind: ${job.kind}`),
+        job.attempt,
+        job.maxAttempts,
+      );
+      return;
+    }
+
+    try {
+      await worker.work(job);
+      await this.driver.completeJob(job.id);
+    } catch (error) {
+      await this.driver.failJob(job.id, error as Error, job.attempt, job.maxAttempts);
+    }
   }
 }

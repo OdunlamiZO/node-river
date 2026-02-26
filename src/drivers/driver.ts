@@ -1,55 +1,74 @@
-import { InsertOpts, JobArgs } from '../types';
+import { InsertOpts, Job, JobArgs } from '../types';
 import InsertResult from '../types/insert-result';
 
 /**
- * Common interface for all RiverQueue drivers (e.g., Postgres, Prisma, Sequelize, etc.).
- * The generic parameter Tx must be set to the driver's transaction/session type.
+ * Common interface all River drivers must implement (e.g. PgDriver).
+ * `Tx` is the driver-specific transaction type (e.g. `PoolClient` for pg).
  */
 export default interface Driver<Tx> {
   /**
-   * Checks if the driver can connect to the database. Throws on failure.
+   * Verifies the driver can reach the database. Throws if the connection fails.
    */
   verifyConnection(): Promise<void>;
 
   /**
-   * Closes all database connections and cleans up resources.
+   * Closes all database connections and frees resources.
    */
   close(): Promise<void>;
 
   /**
-   * Inserts a new job into the queue using the provided arguments and options.
-   * @param args - The job arguments to insert.
-   * @param opts - Options for job insertion.
-   * @returns A promise that resolves to the result of the insertion operation,
-   *          including the job and whether the insert was skipped due to uniqueness.
+   * Inserts a single job into the queue.
+   * @param args - Job arguments including `kind` and any job-specific fields.
+   * @param opts - Insertion options: queue, maxAttempts, priority, tags, etc.
+   * @returns The inserted job and a `skipped` flag if deduplicated by uniqueness.
    */
   insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<InsertResult<T>>;
 
   /**
-   * Inserts a new job into the queue within an existing transaction or session.
-   * The type of `tx` is driver-specific and should match the transaction/session type for the driver.
-   *
-   * @param tx - The transaction or session object to use for the insert.
-   * @param args - The job arguments to insert.
-   * @param opts - Options for job insertion.
-   * @returns A promise that resolves to the result of the insertion operation.
+   * Inserts a single job within an existing transaction.
+   * @param tx - The active transaction (type is driver-specific).
+   * @param args - Job arguments including `kind` and any job-specific fields.
+   * @param opts - Insertion options: queue, maxAttempts, priority, tags, etc.
+   * @returns The inserted job and a `skipped` flag if deduplicated by uniqueness.
    */
   insertTx<T extends JobArgs>(tx: Tx, args: T, opts: InsertOpts): Promise<InsertResult<T>>;
 
   /**
-   * Inserts multiple jobs in sequence within a single transaction.
-   * If any insert fails, all previous inserts in the batch are rolled back.
-   *
-   * @param jobs - Array of job argument and option pairs to insert.
-   * @returns Array of InsertResult objects for each job.
+   * Inserts multiple jobs in a single transaction. Rolls back all if any fail.
+   * @param jobs - Array of `{ args, opts }` pairs, one per job.
+   * @returns An array of InsertResult objects in the same order as the input.
    */
   insertMany<T extends JobArgs>(jobs: { args: T; opts: InsertOpts }[]): Promise<InsertResult<T>[]>;
 
   /**
-   * Starts and returns a new transaction or session object for the driver.
-   * The returned object should be used for transactional operations such as insertTx.
-   *
-   * @returns A promise that resolves to the driver's transaction/session object.
+   * Returns a new transaction object for use with `insertTx`.
+   * Caller is responsible for committing or rolling back.
    */
   getTx(): Promise<Tx>;
+
+  /**
+   * Atomically claims up to `limit` available jobs and marks them as running.
+   * Uses `FOR UPDATE SKIP LOCKED` to prevent concurrent workers from double-claiming.
+   * @param queue - The queue to fetch jobs from.
+   * @param limit - Max number of jobs to claim, based on available concurrency slots.
+   * @param clientId - This client's ID, appended to the job's `attemptedBy` list.
+   * @returns Array of claimed jobs ready to be worked.
+   */
+  getAvailableJobs(queue: string, limit: number, clientId: string): Promise<Job[]>;
+
+  /**
+   * Marks a job as `completed` and stamps `finalizedAt`.
+   * @param id - The ID of the job to complete.
+   */
+  completeJob(id: number): Promise<void>;
+
+  /**
+   * Marks a job as `retryable` (with exponential backoff) or `discarded` (if max attempts reached).
+   * Appends the error details to the job's `errors` array.
+   * @param id - The ID of the job that failed.
+   * @param error - The error thrown by the worker.
+   * @param attempt - The attempt number that failed.
+   * @param maxAttempts - The job's maximum allowed attempts.
+   */
+  failJob(id: number, error: Error, attempt: number, maxAttempts: number): Promise<void>;
 }

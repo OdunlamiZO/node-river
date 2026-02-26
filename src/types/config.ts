@@ -1,14 +1,29 @@
+import QueueConfiguration from './queue-config';
+
 /**
- * Configuration options for the RiverQueue client.
+ * Configuration options for the RiverClient.
  */
 export default interface ClientConfiguration {
   /**
-   * Default queue name for job insertion
+   * Queues to poll and their per-queue configuration (e.g. concurrency).
+   * Only used when `work()` is called. Keys are queue names.
    */
-  defaultQueue?: string;
+  queues?: Record<string, QueueConfiguration>;
 
   /**
-   * Maximum number of attempts for jobs
+   * Default maximum number of attempts for inserted jobs before they are discarded.
    */
   maxAttempts?: number;
+
+  /**
+   * How often (in milliseconds) the client polls the database for available jobs.
+   * Only applies when `work()` is called.
+   */
+  pollInterval?: number;
+
+  /**
+   * Unique identifier for this client instance, recorded in each job's `attemptedBy` list.
+   * Defaults to `hostname-pid` (e.g. `"web-server-12345"`).
+   */
+  clientId?: string;
 }
