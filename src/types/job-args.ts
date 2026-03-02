@@ -1,18 +1,11 @@
 /**
- * Interface for job argument objects passed to job handlers.
+ * Represents the arguments for a job, always including a 'kind' property,
+ * and optionally extending with additional custom properties.
  *
- * Every job must specify a `kind` to identify its type, and can include
- * any number of additional properties relevant to the job's execution.
+ * @template T - Additional properties for the job arguments.
  */
-export default interface JobArgs {
-  /**
-   * Identifies the job type for routing and processing.
-   */
+type JobArgs<T extends object = object> = {
   kind: string;
+} & T;
 
-  /**
-   * Arbitrary job parameters, allowing for flexible job payloads.
-   * All values should be JSON-compatible.
-   */
-  [key: string]: unknown;
-}
+export default JobArgs;

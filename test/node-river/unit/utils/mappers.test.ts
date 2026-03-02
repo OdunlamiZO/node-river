@@ -45,7 +45,7 @@ describe('bitmaskToJobStates', () => {
 });
 
 describe('mapToUniqueKey', () => {
-  const baseArgs: JobArgs = {
+  const baseArgs: JobArgs<{ userId: number; message: string }> = {
     kind: 'email',
     userId: 123,
     message: 'Hello',

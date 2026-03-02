@@ -27,13 +27,20 @@ export const bitmaskToJobStates = (bitmask: Buffer | null): JobState[] | null =>
 };
 
 /**
- * Maps job args and unique options to a unique key buffer.
+ * Generates a unique key buffer based on job arguments and unique options.
  *
- * @param args - The job arguments to use for uniqueness computation.
- * @param opts - The insertion options, including unique options.
+ * Combines selected properties from the job arguments (`args`) and insertion options (`opts`)
+ * according to the provided unique options, then hashes the result to produce a unique Buffer.
+ *
+ * @template T - The shape of additional job argument properties.
+ * @param args - The job arguments, always including a 'kind' property and optionally more.
+ * @param opts - The insertion options, including unique options that determine which properties are used.
  * @returns A Buffer containing the unique key, or undefined if no unique options are set.
  */
-export const mapToUniqueKey = (args: JobArgs, opts: InsertOpts): Buffer | undefined => {
+export const mapToUniqueKey = <T extends JobArgs>(
+  args: T,
+  opts: InsertOpts,
+): Buffer | undefined => {
   const uniqueOpts = opts.uniqueOpts;
   if (!uniqueOpts) return undefined;
 
@@ -46,7 +53,10 @@ export const mapToUniqueKey = (args: JobArgs, opts: InsertOpts): Buffer | undefi
   if (uniqueOpts.byArgs === true) {
     keyParts.args = args;
   } else if (Array.isArray(uniqueOpts.byArgs)) {
-    keyParts.args = Object.fromEntries(uniqueOpts.byArgs.sort().map((k) => [k, args[k]]));
+    keyParts.args = uniqueOpts.byArgs.sort().reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = args[k as keyof typeof args];
+      return acc;
+    }, {});
   }
 
   if (uniqueOpts.byQueue) {

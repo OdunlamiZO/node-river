@@ -89,11 +89,10 @@ await client.insert(
 Implement the `Worker<T>` interface for each job kind, register it with `addWorker`, then call `work()`. Each queue is polled independently at the configured concurrency limit.
 
 ```ts
-import { Worker, Job } from '@odunlamizo/node-river/types';
+import { Job, JobArgs, Worker } from '@odunlamizo/node-river/types';
 
-interface SendEmailArgs {
+interface SendEmailArgs extends JobArgs<{ to: string }> {
   kind: 'send_email';
-  to: string;
 }
 
 class SendEmailWorker implements Worker<SendEmailArgs> {
