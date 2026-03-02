@@ -19,7 +19,7 @@ const driver = new PgDriver({ connectionString: process.env.DATABASE_URL! });
 const client = new RiverClient(driver, {
   queues: {
     default: { concurrency: 10 },
-    emails:  { concurrency: 50 },
+    emails: { concurrency: 50 },
   },
   maxAttempts: 3,
 });
@@ -37,7 +37,7 @@ const result = await client.insert(
   { kind: 'send_email', to: 'user@example.com' },
   { queue: 'emails' },
 );
-console.log(result.job);    // inserted Job record
+console.log(result.job); // inserted Job record
 console.log(result.skipped); // true if deduplicated
 
 // Multiple jobs in one transaction (all succeed or all roll back)
@@ -89,7 +89,7 @@ await client.insert(
 Implement the `Worker<T>` interface for each job kind, register it with `addWorker`, then call `work()`. Each queue is polled independently at the configured concurrency limit.
 
 ```ts
-import { Worker, Job } from '@odunlamizo/node-river';
+import { Worker, Job } from '@odunlamizo/node-river/types';
 
 interface SendEmailArgs {
   kind: 'send_email';
@@ -120,12 +120,12 @@ process.on('SIGTERM', async () => {
 
 ## Configuration
 
-| Option | Type | Description |
-|---|---|---|
-| `queues` | `Record<string, { concurrency: number }>` | Queues to poll and their concurrency limits. Required for `work()`. |
-| `maxAttempts` | `number` | Default max attempts for inserted jobs. |
-| `pollInterval` | `number` | Milliseconds between polls. Defaults to `1000`. |
-| `clientId` | `string` | Unique ID for this client instance. Defaults to `hostname-pid`. |
+| Option         | Type                                      | Description                                                         |
+| -------------- | ----------------------------------------- | ------------------------------------------------------------------- |
+| `queues`       | `Record<string, { concurrency: number }>` | Queues to poll and their concurrency limits. Required for `work()`. |
+| `maxAttempts`  | `number`                                  | Default max attempts for inserted jobs.                             |
+| `pollInterval` | `number`                                  | Milliseconds between polls. Defaults to `1000`.                     |
+| `clientId`     | `string`                                  | Unique ID for this client instance. Defaults to `hostname-pid`.     |
 
 ## License
 

@@ -7,6 +7,7 @@ import Job from './job';
 import JobArgs from './job-args';
 import QueueConfiguration from './queue-config';
 import UniqueOpts from './unique-opts';
+import Worker from './worker';
 
 export {
   AttemptError,
@@ -18,4 +19,5 @@ export {
   JobState,
   QueueConfiguration,
   UniqueOpts,
+  Worker,
 };

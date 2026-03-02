@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import RiverClient from '../../../src/client';
 import Driver from '../../../src/drivers/driver';
-import { Job, JobState } from '../../../src/types';
-import Worker from '../../../src/types/worker';
+import { Job, JobState, Worker } from '../../../src/types';
 
 // A mock driver with all methods as jest.fn()
 function makeMockDriver(): Driver<unknown> {

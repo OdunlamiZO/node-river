@@ -2,8 +2,7 @@ import os from 'os';
 import process from 'process';
 import { clearTimeout, setTimeout } from 'timers';
 import { Driver } from './drivers';
-import { ClientConfiguration, InsertOpts, InsertResult, Job, JobArgs } from './types';
-import Worker from './types/worker';
+import { ClientConfiguration, InsertOpts, InsertResult, Job, JobArgs, Worker } from './types';
 import { CLIENT_CONFIGURATION_DEFAULTS } from './utils';
 
 /**
