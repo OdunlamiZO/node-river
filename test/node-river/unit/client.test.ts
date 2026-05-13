@@ -140,6 +140,34 @@ describe('RiverClient worker', () => {
     expect(driver.getAvailableJobs).toHaveBeenCalledWith('default', 5, expect.any(String));
   });
 
+  it('polls multiple queues in parallel', async () => {
+    client = new RiverClient(driver, {
+      queues: {
+        default: { concurrency: 2 },
+        urgent: { concurrency: 3 },
+      },
+      pollInterval: 60_000,
+    });
+
+    let resolveDefaultQueue: (jobs: Job[]) => void;
+    const defaultQueue = new Promise<Job[]>((resolve) => {
+      resolveDefaultQueue = resolve;
+    });
+
+    (driver.getAvailableJobs as jest.Mock).mockImplementation((queue: string) => {
+      if (queue === 'default') return defaultQueue;
+      return Promise.resolve([]);
+    });
+
+    client.work();
+    await flushPromises();
+
+    expect(driver.getAvailableJobs).toHaveBeenCalledWith('default', 2, expect.any(String));
+    expect(driver.getAvailableJobs).toHaveBeenCalledWith('urgent', 3, expect.any(String));
+
+    resolveDefaultQueue!([]);
+  });
+
   it('processes multiple jobs from the same poll concurrently', async () => {
     const jobs = [makeJob({ id: 1 }), makeJob({ id: 2 })];
     (driver.getAvailableJobs as jest.Mock).mockResolvedValueOnce(jobs);
