@@ -1,6 +1,5 @@
 import os from 'os';
 import process from 'process';
-import { clearTimeout, setTimeout } from 'timers';
 import { Driver } from './drivers';
 import { ClientConfiguration, InsertOpts, InsertResult, Job, JobArgs, Worker } from './types';
 import { CLIENT_CONFIGURATION_DEFAULTS } from './utils';
@@ -14,7 +13,7 @@ import { CLIENT_CONFIGURATION_DEFAULTS } from './utils';
 export default class RiverClient<D extends Driver<Tx>, Tx> {
   private readonly running: Map<string, number> = new Map();
   private stopped = false;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly driver: D;
   private readonly configuration: ClientConfiguration;
   private readonly workers: Map<string, Worker> = new Map();
@@ -23,7 +22,7 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
   /**
    * Creates a new RiverClient instance.
    * @param driver - The driver implementation (e.g. PgDriver).
-   * @param configuration - Client options: queues, max attempts, poll interval, and client ID.
+   * @param configuration - Client options: queues, max attempts, poll intervals, and client ID.
    */
   constructor(driver: D, configuration: ClientConfiguration) {
     this.driver = driver;
@@ -44,7 +43,7 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
    */
   async close(): Promise<void> {
     this.stopped = true;
-    if (this.pollTimer) clearTimeout(this.pollTimer);
+    if (this.pollTimer) globalThis.clearTimeout(this.pollTimer);
     await this.driver.close();
   }
 
@@ -123,16 +122,28 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
   private poll(): void {
     if (this.stopped) return;
 
-    this.fetchAndWork().finally(() => {
-      this.pollTimer = setTimeout(
-        () => this.poll(),
-        this.configuration.pollInterval ?? CLIENT_CONFIGURATION_DEFAULTS.pollInterval,
-      );
-    });
+    this.fetchAndWork().then(
+      (hasFullBatch) => {
+        const pollInterval =
+          this.configuration.pollInterval ?? CLIENT_CONFIGURATION_DEFAULTS.pollInterval;
+        const delay = hasFullBatch
+          ? (this.configuration.busyPollInterval ?? pollInterval)
+          : pollInterval;
+
+        this.pollTimer = globalThis.setTimeout(() => this.poll(), delay);
+      },
+      () => {
+        this.pollTimer = globalThis.setTimeout(
+          () => this.poll(),
+          this.configuration.pollInterval ?? CLIENT_CONFIGURATION_DEFAULTS.pollInterval,
+        );
+      },
+    );
   }
 
-  private async fetchAndWork(): Promise<void> {
+  private async fetchAndWork(): Promise<boolean> {
     const queues = Object.entries(this.configuration.queues ?? {});
+    let hasFullBatch = false;
 
     for (const [queue, queueConfig] of queues) {
       const running = this.running.get(queue) ?? 0;
@@ -140,6 +151,7 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
       if (slots <= 0) continue;
 
       const jobs = await this.driver.getAvailableJobs(queue, slots, this.clientId);
+      if (jobs.length === slots) hasFullBatch = true;
 
       for (const job of jobs) {
         this.running.set(job.queue, (this.running.get(job.queue) ?? 0) + 1);
@@ -148,6 +160,8 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
         });
       }
     }
+
+    return hasFullBatch;
   }
 
   private async processJob(job: Job): Promise<void> {

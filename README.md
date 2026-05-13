@@ -119,12 +119,13 @@ process.on('SIGTERM', async () => {
 
 ## Configuration
 
-| Option         | Type                                      | Description                                                         |
-| -------------- | ----------------------------------------- | ------------------------------------------------------------------- |
-| `queues`       | `Record<string, { concurrency: number }>` | Queues to poll and their concurrency limits. Required for `work()`. |
-| `maxAttempts`  | `number`                                  | Default max attempts for inserted jobs.                             |
-| `pollInterval` | `number`                                  | Milliseconds between polls. Defaults to `1000`.                     |
-| `clientId`     | `string`                                  | Unique ID for this client instance. Defaults to `hostname-pid`.     |
+| Option             | Type                                      | Description                                                                                   |
+| ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `queues`           | `Record<string, { concurrency: number }>` | Queues to poll and their concurrency limits. Required for `work()`.                           |
+| `maxAttempts`      | `number`                                  | Default max attempts for inserted jobs.                                                       |
+| `pollInterval`     | `number`                                  | Milliseconds between polls. Defaults to `1000`.                                               |
+| `busyPollInterval` | `number`                                  | Milliseconds between polls after a full batch is found. Defaults to `pollInterval`.           |
+| `clientId`         | `string`                                  | Unique ID for this client instance. Defaults to `hostname-pid`.                               |
 
 ## License
 

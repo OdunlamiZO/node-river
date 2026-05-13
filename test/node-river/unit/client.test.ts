@@ -43,6 +43,11 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   };
 }
 
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('RiverClient worker', () => {
   let driver: Driver<unknown>;
   let client: RiverClient<Driver<unknown>, unknown>;
@@ -58,6 +63,7 @@ describe('RiverClient worker', () => {
 
   afterEach(async () => {
     await client.close();
+    jest.useRealTimers();
   });
 
   it('calls worker.work() and completeJob when the worker succeeds', async () => {
@@ -154,5 +160,69 @@ describe('RiverClient worker', () => {
     expect(worker.work).toHaveBeenCalledTimes(2);
     expect(driver.completeJob).toHaveBeenCalledWith(1);
     expect(driver.completeJob).toHaveBeenCalledWith(2);
+  });
+
+  it('re-polls after busyPollInterval when a queue returns a full batch', async () => {
+    jest.useFakeTimers();
+    client = new RiverClient(driver, {
+      queues: { default: { concurrency: 2 } },
+      pollInterval: 60_000,
+      busyPollInterval: 0,
+    });
+    const jobs = [makeJob({ id: 1 }), makeJob({ id: 2 })];
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValue([]);
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValueOnce(jobs);
+
+    const worker: Worker = { work: jest.fn().mockResolvedValue(undefined) };
+    client.addWorker('test_job', worker);
+    client.work();
+
+    await flushPromises();
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(2);
+  });
+
+  it('defaults busy polling to the poll interval', async () => {
+    jest.useFakeTimers();
+    const jobs = [makeJob({ id: 1 }), makeJob({ id: 2 })];
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValue([]);
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValueOnce(jobs);
+
+    const worker: Worker = { work: jest.fn().mockResolvedValue(undefined) };
+    client.addWorker('test_job', worker);
+    client.work();
+
+    await flushPromises();
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(59_999);
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits the poll interval when a queue returns fewer jobs than available slots', async () => {
+    jest.useFakeTimers();
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValue([]);
+    (driver.getAvailableJobs as jest.Mock).mockResolvedValueOnce([makeJob()]);
+
+    const worker: Worker = { work: jest.fn().mockResolvedValue(undefined) };
+    client.addWorker('test_job', worker);
+    client.work();
+
+    await flushPromises();
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(59_999);
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(driver.getAvailableJobs).toHaveBeenCalledTimes(2);
   });
 });
