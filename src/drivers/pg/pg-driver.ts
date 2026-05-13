@@ -6,6 +6,22 @@ import { bitmaskToJobStates, mapToUniqueKey } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
 
+// pg object that can run SQL queries.
+type QueryExecutor = Pick<Pool, 'query'>;
+
+// Row returned by pg before unique state bitmasks are decoded.
+type PgRow = Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null };
+
+// Value type bound into pg insert query parameters.
+type PgValue = string | number | Buffer;
+
+// Column names and bound values for one pg insert row.
+type PgInsert = {
+  columns: string[];
+  values: PgValue[];
+};
+
+// Shared RETURNING columns for pg job insert queries.
 const JOB_RETURNING_COLUMNS = `
       id,
       state,
@@ -82,10 +98,7 @@ export default class PgDriver implements Driver<PoolClient> {
       await client.query('BEGIN');
 
       const results: InsertResult<T>[] = [];
-      let batch: {
-        index: number;
-        parts: { columns: string[]; values: (string | number | Buffer)[] };
-      }[] = [];
+      let batch: { index: number; insert: PgInsert }[] = [];
       let batchColumnKey: string | null = null;
 
       const flushBatch = async (): Promise<void> => {
@@ -93,7 +106,7 @@ export default class PgDriver implements Driver<PoolClient> {
 
         const batchResults = await this.insertBatchTx<T>(
           client,
-          batch.map((job) => job.parts),
+          batch.map((job) => job.insert),
         );
 
         batch.forEach((job, i) => {
@@ -111,13 +124,13 @@ export default class PgDriver implements Driver<PoolClient> {
           continue;
         }
 
-        const parts = this.buildInsertParts(job.args, job.opts);
-        const columnKey = parts.columns.join('\0');
+        const insert = this.buildPgInsert(job.args, job.opts);
+        const columnKey = insert.columns.join('\0');
         if (batchColumnKey && batchColumnKey !== columnKey) {
           await flushBatch();
         }
 
-        batch.push({ index, parts });
+        batch.push({ index, insert });
         batchColumnKey = columnKey;
       }
 
@@ -217,8 +230,9 @@ export default class PgDriver implements Driver<PoolClient> {
     );
   }
 
+  // Inserts one job using either the pool or a transaction client.
   private async insertWithQueryExecutor<T extends JobArgs>(
-    executor: Pick<Pool, 'query'>,
+    executor: QueryExecutor,
     args: T,
     opts: InsertOpts,
   ): Promise<InsertResult<T>> {
@@ -244,9 +258,7 @@ export default class PgDriver implements Driver<PoolClient> {
 
       query += ' LIMIT 1';
 
-      const result = await executor.query<
-        Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
-      >(query, values);
+      const result = await executor.query<PgRow>(query, values);
 
       if (result.rows.length > 0) {
         const row = result.rows[0];
@@ -255,14 +267,12 @@ export default class PgDriver implements Driver<PoolClient> {
       }
     }
 
-    const { columns, values } = this.buildInsertParts(args, opts, uniqueKey);
+    const { columns, values } = this.buildPgInsert(args, opts, uniqueKey);
 
     const placeholders = columns.map((_, i) => `$${i + 1}`);
     const query = `INSERT INTO river_job (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING
       ${JOB_RETURNING_COLUMNS}`;
-    const result = await executor.query<
-      Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
-    >(query, values);
+    const result = await executor.query<PgRow>(query, values);
 
     const row = result.rows[0];
     if (!row) return row;
@@ -270,23 +280,19 @@ export default class PgDriver implements Driver<PoolClient> {
     return this.mapRowToInsertResult(row, false);
   }
 
-  private buildInsertParts<T extends JobArgs>(
+  // Builds the column list and parameter values for one job insert.
+  private buildPgInsert<T extends JobArgs>(
     args: T,
     opts: InsertOpts,
     uniqueKey?: Buffer,
-  ): { columns: string[]; values: (string | number | Buffer)[] } {
+  ): PgInsert {
     if (!opts.maxAttempts) {
       throw new Error('maxAttempts is required in InsertOpts');
     }
 
     const { kind, ...restArgs } = args;
     const columns = ['kind', 'args', 'queue', 'max_attempts'];
-    const values: (string | number | Buffer)[] = [
-      kind,
-      JSON.stringify(restArgs),
-      opts.queue,
-      opts.maxAttempts,
-    ];
+    const values: PgValue[] = [kind, JSON.stringify(restArgs), opts.queue, opts.maxAttempts];
 
     if (opts.tags) {
       columns.push('tags');
@@ -318,12 +324,13 @@ export default class PgDriver implements Driver<PoolClient> {
     return { columns, values };
   }
 
+  // Inserts compatible non-unique jobs with one multi-row INSERT query.
   private async insertBatchTx<T extends JobArgs>(
-    tx: PoolClient,
-    batch: { columns: string[]; values: (string | number | Buffer)[] }[],
+    tx: QueryExecutor,
+    batch: PgInsert[],
   ): Promise<InsertResult<T>[]> {
     const columns = batch[0].columns;
-    const values: (string | number | Buffer)[] = [];
+    const values: PgValue[] = [];
     const valueRows = batch.map((job) => {
       const placeholders = job.values.map((value) => {
         values.push(value);
@@ -335,21 +342,13 @@ export default class PgDriver implements Driver<PoolClient> {
 
     const query = `INSERT INTO river_job (${columns.join(', ')}) VALUES ${valueRows.join(', ')} RETURNING
       ${JOB_RETURNING_COLUMNS}`;
-    const result = await tx.query<Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }>(
-      query,
-      values,
-    );
+    const result = await tx.query<PgRow>(query, values);
 
     return result.rows.map((row) => this.mapRowToInsertResult<T>(row, false));
   }
 
-  /**
-   * Helper to map a DB row to a Job<T> and InsertResult.
-   */
-  private mapRowToInsertResult<T extends JobArgs>(
-    row: Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null },
-    skipped: boolean,
-  ): InsertResult<T> {
+  // Maps a pg row to a typed job insert result.
+  private mapRowToInsertResult<T extends JobArgs>(row: PgRow, skipped: boolean): InsertResult<T> {
     return {
       job: {
         ...row,
