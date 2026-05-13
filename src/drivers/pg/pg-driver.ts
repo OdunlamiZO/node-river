@@ -5,6 +5,7 @@ import { InsertOpts, InsertResult, Job, JobArgs, JobState } from '../../types';
 import { bitmaskToJobStates, mapToUniqueKey } from '../../utils';
 import Driver from '../driver';
 import Options from './pg-options';
+import { QueryExecutor } from './types';
 
 // Implements the RiverQueue Driver interface using the 'pg' library.
 export default class PgDriver implements Driver<PoolClient> {
@@ -43,16 +44,19 @@ export default class PgDriver implements Driver<PoolClient> {
   }
 
   async insert<T extends JobArgs>(args: T, opts: InsertOpts): Promise<InsertResult<T>> {
-    const client = await this.pool.connect();
-    try {
-      return await this.insertTx(client, args, opts);
-    } finally {
-      client.release();
-    }
+    return this.insertWithQueryExecutor(this.pool, args, opts);
   }
 
   async insertTx<T extends JobArgs>(
     tx: PoolClient,
+    args: T,
+    opts: InsertOpts,
+  ): Promise<InsertResult<T>> {
+    return this.insertWithQueryExecutor(tx, args, opts);
+  }
+
+  private async insertWithQueryExecutor<T extends JobArgs>(
+    executor: QueryExecutor,
     args: T,
     opts: InsertOpts,
   ): Promise<InsertResult<T>> {
@@ -78,10 +82,9 @@ export default class PgDriver implements Driver<PoolClient> {
 
       query += ' LIMIT 1';
 
-      const result = await tx.query<Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }>(
-        query,
-        values,
-      );
+      const result = await executor.query<
+        Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
+      >(query, values);
 
       if (result.rows.length > 0) {
         const row = result.rows[0];
@@ -146,10 +149,9 @@ export default class PgDriver implements Driver<PoolClient> {
       tags,
       unique_key as "uniqueKey",
       unique_states as "uniqueStates"`;
-    const result = await tx.query<Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }>(
-      query,
-      values,
-    );
+    const result = await executor.query<
+      Omit<Job, 'uniqueStates'> & { uniqueStates: Buffer | null }
+    >(query, values);
 
     const row = result.rows[0];
     if (!row) return row;
