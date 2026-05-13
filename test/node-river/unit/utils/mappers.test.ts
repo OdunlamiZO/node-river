@@ -87,6 +87,15 @@ describe('mapToUniqueKey', () => {
     expect(key1).toEqual(key3);
   });
 
+  it('does not mutate byArgs when sorting selected args', () => {
+    const byArgs = ['userId', 'message'];
+    const opts: InsertOpts = { queue: 'default', uniqueOpts: { byArgs } };
+
+    mapToUniqueKey(baseArgs, opts);
+
+    expect(byArgs).toEqual(['userId', 'message']);
+  });
+
   it('includes queue if byQueue is true', () => {
     const opts: InsertOpts = { queue: 'q1', uniqueOpts: { byQueue: true } };
     const key1 = mapToUniqueKey(baseArgs, opts);
