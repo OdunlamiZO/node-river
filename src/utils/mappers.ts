@@ -53,7 +53,7 @@ export const mapToUniqueKey = <T extends JobArgs>(
   if (uniqueOpts.byArgs === true) {
     keyParts.args = args;
   } else if (Array.isArray(uniqueOpts.byArgs)) {
-    keyParts.args = uniqueOpts.byArgs.sort().reduce<Record<string, unknown>>((acc, k) => {
+    keyParts.args = [...uniqueOpts.byArgs].sort().reduce<Record<string, unknown>>((acc, k) => {
       acc[k] = args[k as keyof typeof args];
       return acc;
     }, {});
