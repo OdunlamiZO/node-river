@@ -17,9 +17,16 @@ export default interface ClientConfiguration {
 
   /**
    * How often (in milliseconds) the client polls the database for available jobs.
-   * Only applies when `work()` is called.
+   * Only applies when `work()` is called. Defaults to `1000`.
    */
   pollInterval?: number;
+
+  /**
+   * How long to wait before polling again after a queue returns a full batch.
+   * Lower values reduce latency while a queue is busy, but can increase database
+   * query volume. Defaults to `pollInterval`.
+   */
+  busyPollInterval?: number;
 
   /**
    * Unique identifier for this client instance, recorded in each job's `attemptedBy` list.
