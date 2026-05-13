@@ -143,14 +143,23 @@ export default class RiverClient<D extends Driver<Tx>, Tx> {
 
   private async fetchAndWork(): Promise<boolean> {
     const queues = Object.entries(this.configuration.queues ?? {});
-    let hasFullBatch = false;
-
-    for (const [queue, queueConfig] of queues) {
+    const queueFetches = queues.flatMap(([queue, queueConfig]) => {
       const running = this.running.get(queue) ?? 0;
       const slots = queueConfig.concurrency - running;
-      if (slots <= 0) continue;
+      if (slots <= 0) return [];
 
-      const jobs = await this.driver.getAvailableJobs(queue, slots, this.clientId);
+      return [
+        this.driver.getAvailableJobs(queue, slots, this.clientId).then((jobs) => ({
+          jobs,
+          slots,
+        })),
+      ];
+    });
+
+    const queueResults = await Promise.all(queueFetches);
+    let hasFullBatch = false;
+
+    for (const { jobs, slots } of queueResults) {
       if (jobs.length === slots) hasFullBatch = true;
 
       for (const job of jobs) {
